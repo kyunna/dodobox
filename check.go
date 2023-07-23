@@ -66,6 +66,7 @@ func (c *Client) Check(ip string, remoteAddr string) (QueryResult, error) {
 	c.Request.URL.RawQuery = ""
 	c.Request.URL.Path = strings.ReplaceAll(c.Request.URL.Path, apiPath, "")
 
+	// Handling query results
 	log.Print(remoteAddr + "\t" + apiPath + "\t" + ip)
 
 	bytes, err := io.ReadAll(response.Body)
@@ -77,6 +78,12 @@ func (c *Client) Check(ip string, remoteAddr string) (QueryResult, error) {
 		return result, err
 	}
 
+	// Check requests limit
+	if response.Header.Values("X-RateLimit-Limit")[0] == "0" {
+		log.Print("The request limit has been reached.")
+	}
+
+	// HTTP status code is not 200
 	if response.StatusCode != 200 {
 		fmt.Println(string(bytes))
 	}

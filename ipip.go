@@ -80,7 +80,7 @@ func main() {
 		result, err := client.Check(postData.IP, c.Request().RemoteAddr)
 		if err != nil {
 			log.Print(err)
-			return c.String(http.StatusInternalServerError, "Query error")
+			return c.String(http.StatusInternalServerError, "Query error : "+err.Error())
 		}
 
 		return c.JSON(http.StatusOK, result)
