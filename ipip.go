@@ -9,6 +9,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 type Client struct {
@@ -66,6 +67,10 @@ func main() {
 
 	// Run the reputation check RestAPI Server
 	e := echo.New()
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"http://dodobox.pppp.page", "http://localhost:3000"},
+		AllowMethods: []string{echo.GET, echo.POST},
+	}))
 
 	// Single IP Check
 	e.POST("/check/endpoint", func(c echo.Context) (err error) {
