@@ -67,8 +67,11 @@ func main() {
 
 	// Run the reputation check RestAPI Server
 	e := echo.New()
+	e.Use(middleware.HTTPSRedirect())
+	// e.use(middleware.Logger())
+	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://dodobox.pppp.page", "http://localhost:3000"},
+		AllowOrigins: []string{"http://dodobox.pppp.page"},
 		AllowMethods: []string{echo.GET, echo.POST},
 	}))
 
@@ -91,5 +94,5 @@ func main() {
 		return c.JSON(http.StatusOK, result)
 	})
 
-	e.Logger.Fatal(e.Start(":" + os.Getenv("PORT")))
+	e.Logger.Fatal(e.StartTLS(":"+os.Getenv("PORT"), os.Getenv("CERT"), os.Getenv("KEY")))
 }
