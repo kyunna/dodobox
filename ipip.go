@@ -71,7 +71,7 @@ func main() {
 	// e.use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://dodobox.pppp.page"},
+		AllowOrigins: []string{"https://dodobox.pppp.page"},
 		AllowMethods: []string{echo.GET, echo.POST},
 	}))
 
