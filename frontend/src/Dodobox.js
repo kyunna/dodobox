@@ -1,22 +1,41 @@
-import React, { useState, } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
-import Textarea from '@mui/joy/Textarea';
-import Button from '@mui/joy/Button';
-import Table from '@mui/joy/Table';
-import Grid from '@mui/joy/Grid';
+import { 
+  TextField,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Grid,
+  Paper,
+  ThemeProvider,
+  createTheme,
+  LinearProgress
+} from '@mui/material';
 import FlutterDashIcon from '@mui/icons-material/FlutterDash';
-import { CssVarsProvider, extendTheme } from '@mui/joy/styles';
+import CircularProgress from '@mui/material/CircularProgress';
 
-const dodoTheme = extendTheme({
+const theme = createTheme({
+  typography: {
+    fontFamily: 'Varela Round',
+  },
   components: {
-    JoyButton: {
-      variants: [ { props: {}, style: { fontFamily: 'Varela Round', }, }, ],
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          fontFamily: 'Varela Round',
+        },
+      },
     },
-    JoyTextarea: {
-      variants: [ { props: {}, style: { fontFamily: 'Varela Round', }, }, ],
-    },
-    JoyTable: {
-      variants: [ { props: {}, style: { fontFamily: 'Varela Round', }, }, ],
+    MuiTextField: {
+      styleOverrides: {
+        root: {
+          fontFamily: 'Varela Round',
+        },
+      },
     },
   },
 });
@@ -27,112 +46,240 @@ export default function Dodobox() {
   const [responseData, setResponseData] = useState([]);
   const [processItems, setProcessItems] = useState(0);
   const [itemCount, setItemCount] = useState(0);
+  const [errors, setErrors] = useState([]);
+  const [progress, setProgress] = useState(0);
 
   const dodoboxValueChange = (event) => {
     setdodoboxValue(event.target.value);
   };
 
-  const handleQueryButtonClick = async () => {
-    setResponseData([]);
-    setProcessItems(0);
-    setItemCount(0);
-    setLoading(true);
+  const validateIP = (ip) => {
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipRegex.test(ip)) return false;
     
-    const apiURL = process.env.REACT_APP_ABUSE_API_URL;
+    const parts = ip.split('.');
+    return parts.every(part => {
+      const num = parseInt(part, 10);
+      return num >= 0 && num <= 255;
+    });
+  };
 
-    const lines = dodoboxValue.split('\n');
-
-    setItemCount(countItems(lines));
-
-    for (const line of lines) {
-      if (line.trim() !== '') {
-        try{
-          const response = await axios.post(apiURL, {
-            ip: line.trim()
-          });
-          // console.log('API Response for IP', line.trim(), ':', response.data);
-          setResponseData((prevData) => [...prevData, response.data]);
-          setProcessItems((prevItems) => prevItems + 1);
-          /*
-          1) `prevData` is the previous state of the `responseData` array. It contains the data of the previously received API responses.
-          2) `[...prevData]` uses the spread operator (...) to create a new array with all the elements of the prevData array. This is a way to clone the original array.
-          3) `,` separates the elements in the new array.
-          4) `response.data` is the new API response data that you received from the server.
-
-          By combining these elements, the line effectively creates a new array that contains all the previous elements from `prevData` and adds the new `response.data` object as a new element at the end of the new array.
-
-          Why use this approach?
-
-          When you call `setResponseData`, React will compare the new array returned by the function with the previous `responseData` state. Since the new array is different from the previous one, React will recognize the state update and trigger a re-render of the component. This is how React ensures that the component reflects the updated state correctly.
-
-          By creating a new array instead of modifying the existing `prevData` array directly, you maintain immutability. React can efficiently detect the state change and optimize re-renders based on the shallow comparison of the array references.
-
-          Overall, this approach helps you maintain a clear and predictable state flow, ensuring that the component reflects the latest API responses without losing any previously received data.
-          */
-        } catch (error) {
-          console.log(error);
+  const processBatch = async (ips, batchSize = 5) => {
+    const results = [];
+    const errors = [];
+    
+    for (let i = 0; i < ips.length; i += batchSize) {
+      const batch = ips.slice(i, i + batchSize);
+      const promises = batch.map(async ip => {
+        if (!validateIP(ip)) {
+          return {
+            data: {
+              ipAddress: ip,
+              abuseConfidenceScore: '-',
+              countryName: '-',
+              isp: 'Invalid IP Format',
+              domain: '-'
+            },
+            error: true
+          };
         }
+        
+        try {
+          const response = await axios.post(`${process.env.REACT_APP_API_URL}/check/endpoint`, { ip });
+          if (response.data && response.data.data) {
+            return {
+              data: response.data.data,
+              error: false
+            };
+          } else {
+            throw new Error('Invalid response format');
+          }
+        } catch (error) {
+          console.error('Error processing IP:', ip, error);
+          return {
+            data: {
+              ipAddress: ip,
+              abuseConfidenceScore: '-',
+              countryName: '-',
+              isp: `Error: ${error.response?.data?.errors?.[0]?.detail || error.message}`,
+              domain: '-'
+            },
+            error: true
+          };
+        }
+      });
+
+      try {
+        const batchResults = await Promise.all(promises);
+        results.push(...batchResults);
+        
+        const currentProgress = Math.min(((i + batch.length) / ips.length) * 100, 100);
+        setProgress(currentProgress);
+        setProcessItems(results.length);
+        
+        batchResults.forEach(result => {
+          if (result.error) {
+            errors.push(`Error processing ${result.data.ipAddress}: ${result.data.isp}`);
+          }
+        });
+
+        setResponseData([...results]);
+        if (errors.length > 0) {
+          setErrors([...errors]);
+        }
+        
+        if (i + batchSize < ips.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      } catch (error) {
+        console.error('Batch processing error:', error);
+        errors.push(`Batch processing error: ${error.message}`);
       }
     }
-    setLoading(false);
+    
+    return { results, errors };
+  };
+
+  const handleQueryButtonClick = async () => {
+    try {
+      setResponseData([]);
+      setProcessItems(0);
+      setErrors([]);
+      setItemCount(0);
+      setProgress(0);
+      setLoading(true);
+
+      const lines = dodoboxValue
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line !== '');
+      
+      setItemCount(lines.length);
+
+      if (lines.length === 0) {
+        setErrors(['No valid IP addresses provided']);
+        return;
+      }
+
+      const { results, errors } = await processBatch(lines);
+      
+      setResponseData(results);
+      if (errors.length > 0) {
+        setErrors(errors);
+      }
+      
+    } catch (error) {
+      console.error('Processing error:', error);
+      setErrors(prev => [...prev, 'An unexpected error occurred']);
+    } finally {
+      setLoading(false);
+      setProgress(100);
+    }
   };
 
   return (
-    <CssVarsProvider theme={dodoTheme}>
-      <Grid container spacing={1} alignItems="center">
-        <Grid xs={12}>
-          <Textarea
-            placeholder="Type in here… "
-            minRows={7}
-            maxRows={7}
+    <ThemeProvider theme={theme}>
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <TextField
+            multiline
+            rows={7}
+            fullWidth
+            placeholder="Type in here..."
             value={dodoboxValue}
             onChange={dodoboxValueChange}
+            variant="outlined"
           />
         </Grid>
-        <Grid xs={12} sm={6}>
-          {loading ? (
-            <Button loading loadingPosition="start"> {processItems} / {itemCount} </Button>
-          ) : (
-            <Button startDecorator={<FlutterDashIcon />} onClick={handleQueryButtonClick}> Query </Button>
-          )}
+        <Grid item xs={12} sm={6}>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={loading}
+            onClick={handleQueryButtonClick}
+            startIcon={loading ? <CircularProgress size={20} /> : <FlutterDashIcon />}
+          >
+            {loading ? `${processItems}/${itemCount} (${Math.round(progress)}%)` : 'Query'}
+          </Button>
         </Grid>
-        <Grid xs={12}>
+        {loading && (
+          <Grid item xs={12}>
+            <LinearProgress 
+              variant="determinate" 
+              value={progress}
+              sx={{
+                height: 8,
+                borderRadius: 4,
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 4,
+                }
+              }}
+            />
+          </Grid>
+        )}
+        {errors.length > 0 && (
+          <Grid item xs={12}>
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                bgcolor: '#fff3f3', 
+                p: 2, 
+                border: '1px solid #ffcdd2'
+              }}
+            >
+              {errors.map((error, index) => (
+                <div key={index} style={{ color: '#d32f2f', marginBottom: '4px' }}>
+                  {error}
+                </div>
+              ))}
+            </Paper>
+          </Grid>
+        )}
+        <Grid item xs={12}>
           {responseData && responseData.length > 0 && (
-            <Table hoverRow stickyHeader>
-              <thead>
-                <tr>
-                  <th style={{ width:'130px' }}>IP Address</th>
-                  <th style={{ width:'130px', textAlign:'center' }}>Abuse Score</th>
-                  <th style={{ width:'40%' }}>Country</th>
-                  <th style={{ width:'40%' }}>ISP</th>
-                  <th style={{ width:'40%' }}>Domain</th>
-                </tr>
-              </thead>
-              <tbody>
-                {responseData.map((response, index) => (
-                  <tr key={index}>
-                    <td>{response.data.ipAddress}</td>
-                    <td style={{textAlign:'center'}}>{response.data.abuseConfidenceScore}</td>
-                    <td>{response.data.countryName}</td>
-                    <td>{response.data.isp}</td>
-                    <td>{response.data.domain}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+            <TableContainer component={Paper}>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell style={{ width: '130px' }}>IP Address</TableCell>
+                    <TableCell style={{ width: '130px', textAlign: 'center' }}>Abuse Score</TableCell>
+                    <TableCell style={{ width: '40%' }}>Country</TableCell>
+                    <TableCell style={{ width: '40%' }}>ISP</TableCell>
+                    <TableCell style={{ width: '40%' }}>Domain</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {responseData.map((response, index) => (
+                    <TableRow 
+                      key={index} 
+                      hover
+                      sx={{
+                        backgroundColor: response.error ? '#fff3f3' : 'inherit',
+                        '&:hover': {
+                          backgroundColor: response.error ? '#ffe9e9' : undefined
+                        }
+                      }}
+                    >
+                      <TableCell>{response.data.ipAddress}</TableCell>
+                      <TableCell style={{
+                        textAlign: 'center',
+                        color: response.error ? '#d32f2f' : 
+                          response.data.abuseConfidenceScore >= 80 ? '#d32f2f' :
+                          response.data.abuseConfidenceScore >= 50 ? '#ed6c02' : '#2e7d32'
+                      }}>
+                        {response.data.abuseConfidenceScore}
+                      </TableCell>
+                      <TableCell>{response.data.countryName || '-'}</TableCell>
+                      <TableCell>{response.data.isp || '-'}</TableCell>
+                      <TableCell>{response.data.domain || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </Grid>
       </Grid>
-    </CssVarsProvider>
+    </ThemeProvider>
   );
-}
-
-function countItems(data) {
-  let count = 0;
-  for (const item of data) {
-    if (item.trim() !== '') {
-      count++;
-    }
-  }
-  return count;
 }
