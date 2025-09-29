@@ -268,7 +268,22 @@ export default function Dodobox() {
                         }
                       }}
                     >
-                      <TableCell>{response.data.ipAddress}</TableCell>
+                      <TableCell>
+                        <a
+                          href={`https://www.abuseipdb.com/check/${response.data.ipAddress}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            color: '#1976d2',
+                            textDecoration: 'none',
+                            cursor: 'pointer'
+                          }}
+                          onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                          onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                        >
+                          {response.data.ipAddress}
+                        </a>
+                      </TableCell>
                       <TableCell style={{
                         textAlign: 'center',
                         color: response.error ? '#d32f2f' : 
