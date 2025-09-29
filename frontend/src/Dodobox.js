@@ -53,10 +53,16 @@ export default function Dodobox() {
     setdodoboxValue(event.target.value);
   };
 
+  const extractIPsFromLine = (line) => {
+    const ipRegex = /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/g;
+    const matches = line.match(ipRegex);
+    return matches || [];
+  };
+
   const validateIP = (ip) => {
     const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
     if (!ipRegex.test(ip)) return false;
-    
+
     const parts = ip.split('.');
     return parts.every(part => {
       const num = parseInt(part, 10);
@@ -85,7 +91,7 @@ export default function Dodobox() {
         }
         
         try {
-          const response = await axios.post(`${process.env.REACT_APP_API_URL}/check/endpoint`, { ip });
+          const response = await axios.post('/check/endpoint', { ip });
           if (response.data && response.data.data) {
             return {
               data: response.data.data,
@@ -149,19 +155,21 @@ export default function Dodobox() {
       setProgress(0);
       setLoading(true);
 
-      const lines = dodoboxValue
+      const extractedIPs = dodoboxValue
         .split('\n')
         .map(line => line.trim())
-        .filter(line => line !== '');
-      
-      setItemCount(lines.length);
+        .filter(line => line !== '')
+        .flatMap(line => extractIPsFromLine(line))
+        .filter(ip => ip !== null);
 
-      if (lines.length === 0) {
-        setErrors(['No valid IP addresses provided']);
+      setItemCount(extractedIPs.length);
+
+      if (extractedIPs.length === 0) {
+        setErrors(['No valid IP addresses found in the input']);
         return;
       }
 
-      const { results, errors } = await processBatch(lines);
+      const { results, errors } = await processBatch(extractedIPs);
       
       setResponseData(results);
       if (errors.length > 0) {
