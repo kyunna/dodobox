@@ -232,9 +232,8 @@ func main() {
 	// Run the reputation check RestAPI Server
 	e := echo.New()
 
-	// Development 환경에서는 HTTPS 리다이렉트와 CORS 설정을 다르게 적용
+	// TLS는 Caddy가 처리하므로 CORS 설정만 환경별로 구분
 	if os.Getenv("ENV") != "development" {
-		e.Use(middleware.HTTPSRedirect())
 		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 			AllowOrigins: []string{"https://dodobox.pppp.page"},
 			AllowMethods: []string{echo.GET, echo.POST},
@@ -247,6 +246,15 @@ func main() {
 	}
 
 	e.Use(middleware.Recover())
+
+	// Client IP lookup
+	e.GET("/myip", func(c echo.Context) (err error) {
+		ip := c.Request().Header.Get("CF-Connecting-IP")
+		if ip == "" {
+			ip = c.RealIP()
+		}
+		return c.JSON(http.StatusOK, echo.Map{"ip": ip})
+	})
 
 	// Single IP Check
 	e.POST("/check/endpoint", func(c echo.Context) (err error) {
@@ -267,14 +275,6 @@ func main() {
 		return c.JSON(http.StatusOK, result)
 	})
 
-	// 환경에 따라 다른 서버 시작 방식 사용
-	if os.Getenv("ENV") == "development" {
-		e.Logger.Fatal(e.Start(":" + os.Getenv("PORT")))
-	} else {
-		e.Logger.Fatal(e.StartTLS(
-			":"+os.Getenv("PORT"),
-			os.Getenv("CERT"),
-			os.Getenv("KEY"),
-		))
-	}
+	// TLS는 Caddy가 처리하므로 항상 HTTP로 시작
+	e.Logger.Fatal(e.Start(":" + os.Getenv("PORT")))
 }

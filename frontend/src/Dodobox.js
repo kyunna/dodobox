@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   TextField,
@@ -11,9 +11,11 @@ import {
   TableRow,
   Grid,
   Paper,
+  Box,
   ThemeProvider,
   createTheme,
-  LinearProgress
+  LinearProgress,
+  Typography
 } from '@mui/material';
 import FlutterDashIcon from '@mui/icons-material/FlutterDash';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -48,6 +50,11 @@ export default function Dodobox() {
   const [itemCount, setItemCount] = useState(0);
   const [errors, setErrors] = useState([]);
   const [progress, setProgress] = useState(0);
+  const [myIP, setMyIP] = useState('');
+
+  useEffect(() => {
+    axios.get('/myip').then(res => setMyIP(res.data.ip)).catch(() => {});
+  }, []);
 
   const dodoboxValueChange = (event) => {
     setdodoboxValue(event.target.value);
@@ -187,29 +194,36 @@ export default function Dodobox() {
 
   return (
     <ThemeProvider theme={theme}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 3, bgcolor: 'background.paper', pb: 1 }}>
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <TextField
+              multiline
+              rows={7}
+              fullWidth
+              placeholder="Type in here..."
+              value={dodoboxValue}
+              onChange={dodoboxValueChange}
+              variant="outlined"
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={loading}
+              onClick={handleQueryButtonClick}
+              startIcon={loading ? <CircularProgress size={20} /> : <FlutterDashIcon />}
+            >
+              {loading ? `${processItems}/${itemCount} (${Math.round(progress)}%)` : 'Query'}
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              {myIP || '...'}
+            </Typography>
+          </Grid>
+        </Grid>
+      </Box>
       <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <TextField
-            multiline
-            rows={7}
-            fullWidth
-            placeholder="Type in here..."
-            value={dodoboxValue}
-            onChange={dodoboxValueChange}
-            variant="outlined"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={loading}
-            onClick={handleQueryButtonClick}
-            startIcon={loading ? <CircularProgress size={20} /> : <FlutterDashIcon />}
-          >
-            {loading ? `${processItems}/${itemCount} (${Math.round(progress)}%)` : 'Query'}
-          </Button>
-        </Grid>
         {loading && (
           <Grid item xs={12}>
             <LinearProgress 
@@ -258,13 +272,13 @@ export default function Dodobox() {
                 </TableHead>
                 <TableBody>
                   {responseData.map((response, index) => (
-                    <TableRow 
-                      key={index} 
+                    <TableRow
+                      key={index}
                       hover
                       sx={{
-                        backgroundColor: response.error ? '#fff3f3' : 'inherit',
+                        backgroundColor: response.error ? '#fff3f3' : response.data.countryName?.includes('Korea') ? '#f0f7ff' : 'inherit',
                         '&:hover': {
-                          backgroundColor: response.error ? '#ffe9e9' : undefined
+                          backgroundColor: response.error ? '#ffe9e9' : response.data.countryName?.includes('Korea') ? '#e3f0ff' : undefined
                         }
                       }}
                     >
